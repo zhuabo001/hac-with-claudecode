@@ -24,13 +24,15 @@
 新建文件，核心逻辑：
 
 ```typescript
+import { randomUUID } from 'crypto'
+
 // URL 常量（硬编码，使用实际 URL 替换 fake 版本）
 const W3_LOGIN_BASE = 'https://www.loginw3.hw.rnd.com/'
 const HAC_API_BASE = 'https://www.hac-y.hw.rnd.com/api/v1'
 const SSO_VERIFY_TOKEN_URL = 'https://...'  // sso_verify_token_url
 
 export function generateSessionId(): string {
-  return Bun.randomUUIDv7()
+  return randomUUID()
 }
 
 export function buildW3LoginUrl(sessionId: string): string {
@@ -90,7 +92,7 @@ export async function w3Login(): Promise<{ cookie: string, token: string }> {
 - 使用 `useInput` hook 监听键盘，Q 键触发 `process.exit(0)`
 - 选中 "w3登录" 后调用 `w3Login()`，成功后调用 `saveUserInfo()` 写入文件
 
-**Props**: `{ onDone: () => void }`
+**Props**: `{ onDone: () => void }`（注意：此 onDone 是 W3LoginFlow 内部的回调，不同于 Login 组件的 onDone 签名，Login 组件会在外层包装调用）
 
 **复用现有组件**：
 - `Dialog` from `src/components/design-system/Dialog.tsx`
@@ -105,10 +107,11 @@ export async function w3Login(): Promise<{ cookie: string, token: string }> {
 .option('--login', 'Force w3 login')
 ```
 
-**4b. 在 `showSetupScreens()` 调用之前插入 w3 登录检查**（约 line 2239 附近）:
+**4b. 在 `showSetupScreens()` 调用之前插入 w3 登录检查**（约 line 2241 附近，`showSetupScreens()` 调用之前）:
 
 ```typescript
 // W3 Login check — before showSetupScreens
+// showSetupDialog 来自 src/interactiveHelpers.tsx，main.tsx 中已有 import
 const { hasValidUserInfo } = await import('./utils/w3UserInfo.js')
 const forceLogin = (options as any).login === true
 if (forceLogin || !hasValidUserInfo()) {
@@ -128,16 +131,48 @@ if (forceLogin || !hasValidUserInfo()) {
 ```tsx
 import { W3LoginFlow } from '../../components/W3LoginFlow.js'
 
-export function Login(props: { onDone: (success: boolean) => void }) {
+// 保留原有 onDone 签名: (success: boolean, mainLoopModel: string) => void
+// 因为 call() 函数和外部调用方依赖此签名
+export function Login(props: {
+  onDone: (success: boolean, mainLoopModel: string) => void
+  startingMessage?: string
+}): React.ReactNode {
+  const mainLoopModel = useMainLoopModel()
+
   return (
-    <Dialog title="w3登录" onCancel={() => props.onDone(false)} color="permission">
-      <W3LoginFlow onDone={() => props.onDone(true)} />
+    <Dialog
+      title="w3登录"
+      onCancel={() => props.onDone(false, mainLoopModel)}
+      color="permission"
+      inputGuide={exitState =>
+        exitState.pending ? (
+          <Text>Press {exitState.keyName} again to exit</Text>
+        ) : (
+          <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="cancel" />
+        )
+      }
+    >
+      <W3LoginFlow onDone={() => props.onDone(true, mainLoopModel)} />
     </Dialog>
   )
 }
 ```
 
-简化 `call()` 函数，移除 Anthropic 特有的 post-login 逻辑（GrowthBook、trusted device、policy limits 等），因为 w3 登录不需要这些。
+关于 `call()` 函数中的 post-login 逻辑：**不能全部移除**。以下逻辑需要保留，因为它们与认证方式无关，是通用的登录后状态刷新：
+
+- `context.onChangeAPIKey()` — 通知上层 API key 已变更
+- `context.setMessages(stripSignatureBlocks)` — 清除旧签名块
+- `resetCostState()` — 重置费用状态
+- `resetUserCache()` — 清除用户缓存
+- `context.setAppState(prev => ({ ...prev, authVersion: prev.authVersion + 1 }))` — 递增 authVersion 触发 hooks 刷新
+
+以下 Anthropic 特有逻辑可以移除：
+- `refreshRemoteManagedSettings()` — Anthropic 远程配置
+- `refreshPolicyLimits()` — Anthropic 策略限制
+- `refreshGrowthBookAfterAuthChange()` — Anthropic feature flags
+- `clearTrustedDeviceToken()` / `enrollTrustedDevice()` — Anthropic 可信设备
+- `resetBypassPermissionsCheck()` / `checkAndDisableBypassPermissionsIfNeeded()` — Anthropic 权限开关
+- `resetAutoModeGateCheck()` / `checkAndDisableAutoModeIfNeeded()` — Anthropic 自动模式
 
 ### Step 6: 修改 `src/cli/handlers/auth.ts` — 替换 `auth login` 子命令
 
@@ -169,17 +204,26 @@ auth.command('login')
 
 ### Step 8: 修改 `src/utils/auth.ts` — 添加 w3 认证源
 
-在 `getAuthTokenSource()` 函数顶部添加 w3 userinfo 检查，使其成为最高优先级的认证源：
+在 `getAuthTokenSource()` 函数顶部添加 w3 userinfo 检查，使其成为最高优先级的认证源。
+
+**注意**：`getAuthTokenSource()` 是同步函数，不能使用 `await import()`。必须在文件顶部使用静态 import：
 
 ```typescript
-const { getUserInfo } = await import('./w3UserInfo.js')
+// 在 src/utils/auth.ts 文件顶部添加静态 import
+import { getUserInfo } from './w3UserInfo.js'
+```
+
+然后在 `getAuthTokenSource()` 函数体最前面（`isBareMode()` 检查之前）插入：
+
+```typescript
+// W3 SSO — highest priority auth source
 const w3Info = getUserInfo()
 if (w3Info?.token) {
-  return { source: 'w3_sso', hasToken: true }
+  return { source: 'w3_sso' as const, hasToken: true }
 }
 ```
 
-注意：如果 `getAuthTokenSource()` 是同步函数，需要用同步 import 或在模块顶部 import。
+注意使用 `as const` 保持与现有返回值风格一致。
 
 ---
 
