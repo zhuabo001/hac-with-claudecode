@@ -124,62 +124,18 @@ if (forceLogin || !hasValidUserInfo()) {
 
 这个位置在 Ink root 创建之后、`showSetupScreens()` 之前，确保用户先完成认证再进入信任对话框等后续流程。
 
-### Step 5: 修改 `src/commands/login/login.tsx` — 替换 `/login` 命令
+### Step 5: 保留 `src/commands/login/login.tsx` — 不修改原有 `/login` 命令
 
-将 `Login` 组件中的 `ConsoleOAuthFlow` 替换为 `W3LoginFlow`：
+**不修改此文件**。保留原有的 `ConsoleOAuthFlow` 和 OAuth 登录逻辑作为 fallback。
 
-```tsx
-import { W3LoginFlow } from '../../components/W3LoginFlow.js'
+理由：该文件是 React Compiler 编译后的代码（包含 `_c` runtime 和 memoization），直接改写风险高。且 Step 4 已在启动时添加 W3 登录检查，用户日常使用会自动走 W3 流程。
 
-// 保留原有 onDone 签名: (success: boolean, mainLoopModel: string) => void
-// 因为 call() 函数和外部调用方依赖此签名
-export function Login(props: {
-  onDone: (success: boolean, mainLoopModel: string) => void
-  startingMessage?: string
-}): React.ReactNode {
-  const mainLoopModel = useMainLoopModel()
+### Step 6: 修改 `src/cli/handlers/auth.ts` — 新增 `authW3Login()` 函数
 
-  return (
-    <Dialog
-      title="w3登录"
-      onCancel={() => props.onDone(false, mainLoopModel)}
-      color="permission"
-      inputGuide={exitState =>
-        exitState.pending ? (
-          <Text>Press {exitState.keyName} again to exit</Text>
-        ) : (
-          <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="cancel" />
-        )
-      }
-    >
-      <W3LoginFlow onDone={() => props.onDone(true, mainLoopModel)} />
-    </Dialog>
-  )
-}
-```
-
-关于 `call()` 函数中的 post-login 逻辑：**不能全部移除**。以下逻辑需要保留，因为它们与认证方式无关，是通用的登录后状态刷新：
-
-- `context.onChangeAPIKey()` — 通知上层 API key 已变更
-- `context.setMessages(stripSignatureBlocks)` — 清除旧签名块
-- `resetCostState()` — 重置费用状态
-- `resetUserCache()` — 清除用户缓存
-- `context.setAppState(prev => ({ ...prev, authVersion: prev.authVersion + 1 }))` — 递增 authVersion 触发 hooks 刷新
-
-以下 Anthropic 特有逻辑可以移除：
-- `refreshRemoteManagedSettings()` — Anthropic 远程配置
-- `refreshPolicyLimits()` — Anthropic 策略限制
-- `refreshGrowthBookAfterAuthChange()` — Anthropic feature flags
-- `clearTrustedDeviceToken()` / `enrollTrustedDevice()` — Anthropic 可信设备
-- `resetBypassPermissionsCheck()` / `checkAndDisableBypassPermissionsIfNeeded()` — Anthropic 权限开关
-- `resetAutoModeGateCheck()` / `checkAndDisableAutoModeIfNeeded()` — Anthropic 自动模式
-
-### Step 6: 修改 `src/cli/handlers/auth.ts` — 替换 `auth login` 子命令
-
-替换 `authLogin()` 函数为 w3 登录流程（非交互式，直接在终端输出）：
+**新增**（不替换）一个 `authW3Login()` 函数，用于 `auth w3-login` 子命令：
 
 ```typescript
-export async function authLogin(): Promise<void> {
+export async function authW3Login(): Promise<void> {
   const { w3Login } = await import('../../services/w3auth/index.js')
   const { saveUserInfo } = await import('../../utils/w3UserInfo.js')
   const result = await w3Login()
@@ -189,18 +145,22 @@ export async function authLogin(): Promise<void> {
 }
 ```
 
-### Step 7: 修改 `src/main.tsx` — 简化 `auth login` 命令定义
+保留原有的 `authLogin()` 函数不动。
 
-在 line 4101 附近，移除 OAuth 特有的选项（`--email`, `--sso`, `--console`, `--claudeai`）：
+### Step 7: 修改 `src/main.tsx` — 新增 `auth w3-login` 子命令
+
+在 `auth.command('login')` 定义之后，新增一个 `auth w3-login` 子命令（约 line 4110 附近）：
 
 ```typescript
-auth.command('login')
+auth.command('w3-login')
   .description('Sign in via w3 SSO')
   .action(async () => {
-    const { authLogin } = await import('./cli/handlers/auth.js')
-    await authLogin()
+    const { authW3Login } = await import('./cli/handlers/auth.js')
+    await authW3Login()
   })
 ```
+
+保留原有的 `auth.command('login')` 定义不动。
 
 ### Step 8: 修改 `src/utils/auth.ts` — 添加 w3 认证源
 
@@ -234,9 +194,9 @@ if (w3Info?.token) {
 | 新建 | `src/utils/w3UserInfo.ts` |
 | 新建 | `src/services/w3auth/index.ts` |
 | 新建 | `src/components/W3LoginFlow.tsx` |
-| 修改 | `src/main.tsx` (添加 --login 参数 + 登录检查) |
-| 修改 | `src/commands/login/login.tsx` (替换 OAuth 为 W3) |
-| 修改 | `src/cli/handlers/auth.ts` (替换 authLogin) |
+| 修改 | `src/main.tsx` (添加 --login 参数 + 登录检查 + 新增 auth w3-login 子命令) |
+| 不动 | `src/commands/login/login.tsx` (保留原有 OAuth 登录作为 fallback) |
+| 修改 | `src/cli/handlers/auth.ts` (新增 authW3Login 函数) |
 | 修改 | `src/utils/auth.ts` (添加 w3 认证源) |
 
 ---

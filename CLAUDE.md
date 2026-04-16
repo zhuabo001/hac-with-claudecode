@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## code rules
+
+所有编码行为请必须遵守项目根目录下的specs文件夹下的所有md文件内部的规定
+
 ## Common commands
 
 ```bash

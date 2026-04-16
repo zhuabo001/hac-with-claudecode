@@ -89,7 +89,7 @@ import { filterCommandsForRemoteMode, getCommands } from './commands.js';
 import type { StatsStore } from './context/stats.js';
 import { launchAssistantInstallWizard, launchAssistantSessionChooser, launchInvalidSettingsDialog, launchResumeChooser, launchSnapshotUpdateDialog, launchTeleportRepoMismatchDialog, launchTeleportResumeWrapper } from './dialogLaunchers.js';
 import { SHOW_CURSOR } from './ink/termio/dec.js';
-import { exitWithError, exitWithMessage, getRenderContext, renderAndRun, showSetupScreens } from './interactiveHelpers.js';
+import { exitWithError, exitWithMessage, getRenderContext, renderAndRun, showSetupDialog, showSetupScreens } from './interactiveHelpers.js';
 import { initBuiltinPlugins } from './plugins/bundled/index.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { checkQuotaStatus } from './services/claudeAiLimits.js';
@@ -1003,7 +1003,7 @@ async function run(): Promise<CommanderCommand> {
   // `mcp` and `add` as paths, then choked on --transport as an unknown
   // top-level option. Single-value + collect accumulator means each
   // --plugin-dir takes exactly one arg; repeat the flag for multiple dirs.
-  .option('--plugin-dir <path>', 'Load plugins from a directory for this session only (repeatable: --plugin-dir A --plugin-dir B)', (val: string, prev: string[]) => [...prev, val], [] as string[]).option('--disable-slash-commands', 'Disable all skills', () => true).option('--chrome', 'Enable Claude in Chrome integration').option('--no-chrome', 'Disable Claude in Chrome integration').option('--file <specs...>', 'File resources to download at startup. Format: file_id:relative_path (e.g., --file file_abc:doc.txt file_def:img.png)').action(async (prompt, options) => {
+  .option('--plugin-dir <path>', 'Load plugins from a directory for this session only (repeatable: --plugin-dir A --plugin-dir B)', (val: string, prev: string[]) => [...prev, val], [] as string[]).option('--disable-slash-commands', 'Disable all skills', () => true).option('--chrome', 'Enable Claude in Chrome integration').option('--no-chrome', 'Disable Claude in Chrome integration').option('--file <specs...>', 'File resources to download at startup. Format: file_id:relative_path (e.g., --file file_abc:doc.txt file_def:img.png)').option('--login', 'Force w3 login').action(async (prompt, options) => {
     profileCheckpoint('action_handler_start');
 
     // --bare = one-switch minimal mode. Sets SIMPLE so all the existing
@@ -2236,6 +2236,17 @@ async function run(): Promise<CommanderCommand> {
         event: 'startup' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         durationMs: Math.round(process.uptime() * 1000)
       });
+
+      // W3 Login check — before showSetupScreens
+      const { hasValidUserInfo } = await import('./utils/w3UserInfo.js');
+      const forceLogin = (options as any).login === true;
+      if (forceLogin || !hasValidUserInfo()) {
+        const { W3LoginFlow } = await import('./components/W3LoginFlow.js');
+        await showSetupDialog(root, (done) => (
+          <W3LoginFlow onDone={() => done()} />
+        ));
+      }
+
       logForDebugging('[STARTUP] Running showSetupScreens()...');
       const setupScreensStart = Date.now();
       const onboardingShown = await showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions, commands, enableClaudeInChrome, devChannels);
