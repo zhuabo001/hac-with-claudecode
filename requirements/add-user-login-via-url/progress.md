@@ -10,3 +10,6 @@
 | Step 6: 修改 `src/cli/handlers/auth.ts` — 新增 `authW3Login()` 函数 | 已完成 |
 | Step 7: 修改 `src/main.tsx` — 新增 `auth w3-login` 子命令 | 已完成 |
 | Step 8: 修改 `src/utils/auth.ts` — 添加 w3 认证源 | 已完成 |
+| Step 9: 禁用 TLS 证书校验 | 未完成 |
+| Step 10: 鉴权成功后提示关闭浏览器页签 | 未完成 |
+| Step 11: 让 Q 键能中断登录轮询 | 未完成 |

@@ -90,7 +90,7 @@ export async function w3Login(): Promise<{ cookie: string; token: string }> {
 	const sessionId = generateSessionId()
 	const loginUrl = buildW3LoginUrl(sessionId)
 
-	const { openBrowser } = await import('../utils/browser.js')
+	const { openBrowser } = await import('../../utils/browser.js')
 	const opened = await openBrowser(loginUrl)
 
 	if (!opened) {
