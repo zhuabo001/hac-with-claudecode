@@ -11,6 +11,7 @@ import {
 } from 'src/services/analytics/index.js'
 import { getModelStrings } from 'src/utils/model/modelStrings.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
+import { getUserInfo } from './w3UserInfo.js'
 import {
   getIsNonInteractiveSession,
   preferThirdPartyAuthentication,
@@ -152,6 +153,12 @@ export function isAnthropicAuthEnabled(): boolean {
 /** Where the auth token is being sourced from, if any. */
 // this code is closely related to isAnthropicAuthEnabled
 export function getAuthTokenSource() {
+  // W3 SSO — highest priority auth source
+  const w3Info = getUserInfo()
+  if (w3Info?.token) {
+    return { source: 'w3_sso' as const, hasToken: true }
+  }
+
   // --bare: API-key-only. apiKeyHelper (from --settings) is the only
   // bearer-token-shaped source allowed. OAuth env vars, FD tokens, and
   // keychain are ignored.

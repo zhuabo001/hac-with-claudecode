@@ -349,3 +349,19 @@ export async function authLogout(): Promise<void> {
   process.stdout.write('Successfully logged out from your Anthropic account.\n')
   process.exit(0)
 }
+
+export async function authW3Login(): Promise<void> {
+  const { w3Login } = await import('../../services/w3auth/index.js')
+  const { saveUserInfo } = await import('../../utils/w3UserInfo.js')
+  try {
+    const result = await w3Login()
+    saveUserInfo(result)
+    process.stdout.write('登录成功\n')
+    process.exit(0)
+  } catch (err) {
+    process.stderr.write(
+      `W3 登录失败: ${err instanceof Error ? err.message : String(err)}\n`,
+    )
+    process.exit(1)
+  }
+}

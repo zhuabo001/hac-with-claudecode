@@ -4130,6 +4130,12 @@ async function run(): Promise<CommanderCommand> {
       claudeai
     });
   });
+  auth.command('w3-login').description('Sign in via w3 SSO').action(async () => {
+    const {
+      authW3Login
+    } = await import('./cli/handlers/auth.js');
+    await authW3Login();
+  });
   auth.command('status').description('Show authentication status').option('--json', 'Output as JSON (default)').option('--text', 'Output as human-readable text').action(async (opts: {
     json?: boolean;
     text?: boolean;
