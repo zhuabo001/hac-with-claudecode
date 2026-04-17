@@ -62,17 +62,12 @@ export async function verifyToken(cookie: string): Promise<string> {
 /**
  * Poll for cookie with timeout
  * Polls every 2 seconds for up to 120 seconds
- * Throws 'cancelled' when aborted via signal
  */
-async function pollForCookie(sessionId: string, signal?: AbortSignal): Promise<string> {
+async function pollForCookie(sessionId: string): Promise<string> {
 	const maxAttempts = 60 // 120 seconds / 2 seconds per attempt
 	const pollInterval = 2000 // 2 seconds
 
 	for (let attempt = 0; attempt < maxAttempts; attempt++) {
-		if (signal?.aborted) {
-			throw 'cancelled'
-		}
-
 		try {
 			const cookie = await fetchCookie(sessionId)
 			return cookie
@@ -83,13 +78,7 @@ async function pollForCookie(sessionId: string, signal?: AbortSignal): Promise<s
 			}
 
 			// Wait before next attempt
-			await new Promise((resolve, reject) => {
-				const timeout = setTimeout(resolve, pollInterval)
-				signal?.addEventListener('abort', () => {
-					clearTimeout(timeout)
-					reject('cancelled')
-				}, { once: true })
-			})
+			await new Promise(resolve => setTimeout(resolve, pollInterval))
 		}
 	}
 
@@ -99,9 +88,8 @@ async function pollForCookie(sessionId: string, signal?: AbortSignal): Promise<s
 /**
  * Complete W3 login flow
  * Opens browser, waits for user to complete login, fetches cookie and verifies token
- * Throws 'cancelled' when aborted via signal
  */
-export async function w3Login(signal?: AbortSignal): Promise<{ cookie: string; token: string }> {
+export async function w3Login(): Promise<{ cookie: string; token: string }> {
 	const sessionId = generateSessionId()
 	const loginUrl = buildW3LoginUrl(sessionId)
 
@@ -113,7 +101,7 @@ export async function w3Login(signal?: AbortSignal): Promise<{ cookie: string; t
 	}
 
 	// Poll for cookie after user completes login in browser
-	const cookie = await pollForCookie(sessionId, signal)
+	const cookie = await pollForCookie(sessionId)
 	const token = await verifyToken(cookie)
 
 	return { cookie, token }

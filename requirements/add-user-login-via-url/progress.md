@@ -13,3 +13,6 @@
 | Step 9: 禁用 TLS 证书校验 | 已完成 |
 | Step 10: 鉴权成功后提示关闭浏览器页签 | 已完成 |
 | Step 11: 让 Q 键能中断登录轮询 | 已完成 |
+| Step 12: 简化 w3auth，移除 AbortSignal | 已完成 |
+| Step 13: 移除 W3LoginFlow 中的 Q 键监听和 AbortController | 已完成 |
+| Step 14: 更新 progress.md | 已完成 |

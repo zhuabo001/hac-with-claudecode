@@ -55,3 +55,45 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 1. `bun run build:dev:full` 编译通过
 2. `./cli-dev --login` → 浏览器打开 → 完成登录 → 不再报证书错误 → 显示"登录成功，可关闭浏览器页签"
 3. `./cli-dev --login` → 登录过程中按 Q → 进程退出
+
+---
+
+## 追加计划：移除"按 Q 取消登录"功能
+
+### Step 12: 简化 `pollForCookie` 和 `w3Login`，移除 AbortSignal 支持
+
+**文件**: `src/services/w3auth/index.ts`
+
+- `pollForCookie` 移除 `signal` 参数，恢复为简单的 for 循环 + `setTimeout` delay
+- `w3Login` 移除 `signal` 参数
+
+### Step 13: 移除 W3LoginFlow 中的 Q 键监听和 AbortController
+
+**文件**: `src/components/W3LoginFlow.tsx`
+
+- 移除 `useRef` import（不再需要）
+- 移除 `useInput` hook（Q 键监听）
+- 移除 `abortControllerRef`
+- 移除 `handleLogin` 中的 `AbortController` 创建和传递
+- 移除 catch 中的 `error === 'cancelled'` 判断
+- 移除 idle 状态的 `isSelected` 相关 UI
+
+### Step 14: 更新 progress.md
+
+新增 Step 12-13，标记为已完成。
+
+---
+
+## 追加计划修改文件清单
+
+| 文件 | 改动 |
+|------|------|
+| `src/services/w3auth/index.ts` | 移除 AbortSignal，恢复 pollForCookie 为简单循环 |
+| `src/components/W3LoginFlow.tsx` | 移除 useInput、AbortController，恢复简单登录流程 |
+
+---
+
+## 追加计划验证方式
+
+1. `bun run build:dev:full` 编译通过
+2. `./cli-dev --login` → 浏览器打开 → 完成登录 → 正常进入应用，按 Q 无任何反应
