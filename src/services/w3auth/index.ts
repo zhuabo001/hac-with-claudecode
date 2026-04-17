@@ -1,5 +1,8 @@
 import { randomUUID } from 'crypto'
 
+// Skip TLS certificate verification for Huawei internal CA
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+
 // URL constants
 const W3_LOGIN_BASE = 'https://www.loginw3.hw.rnd.com/'
 const HAC_API_BASE = 'https://www.hac-y.hw.rnd.com/api/v1'
@@ -59,12 +62,17 @@ export async function verifyToken(cookie: string): Promise<string> {
 /**
  * Poll for cookie with timeout
  * Polls every 2 seconds for up to 120 seconds
+ * Throws 'cancelled' when aborted via signal
  */
-async function pollForCookie(sessionId: string): Promise<string> {
+async function pollForCookie(sessionId: string, signal?: AbortSignal): Promise<string> {
 	const maxAttempts = 60 // 120 seconds / 2 seconds per attempt
 	const pollInterval = 2000 // 2 seconds
 
 	for (let attempt = 0; attempt < maxAttempts; attempt++) {
+		if (signal?.aborted) {
+			throw 'cancelled'
+		}
+
 		try {
 			const cookie = await fetchCookie(sessionId)
 			return cookie
@@ -75,7 +83,13 @@ async function pollForCookie(sessionId: string): Promise<string> {
 			}
 
 			// Wait before next attempt
-			await new Promise(resolve => setTimeout(resolve, pollInterval))
+			await new Promise((resolve, reject) => {
+				const timeout = setTimeout(resolve, pollInterval)
+				signal?.addEventListener('abort', () => {
+					clearTimeout(timeout)
+					reject('cancelled')
+				}, { once: true })
+			})
 		}
 	}
 
@@ -85,8 +99,9 @@ async function pollForCookie(sessionId: string): Promise<string> {
 /**
  * Complete W3 login flow
  * Opens browser, waits for user to complete login, fetches cookie and verifies token
+ * Throws 'cancelled' when aborted via signal
  */
-export async function w3Login(): Promise<{ cookie: string; token: string }> {
+export async function w3Login(signal?: AbortSignal): Promise<{ cookie: string; token: string }> {
 	const sessionId = generateSessionId()
 	const loginUrl = buildW3LoginUrl(sessionId)
 
@@ -98,7 +113,7 @@ export async function w3Login(): Promise<{ cookie: string; token: string }> {
 	}
 
 	// Poll for cookie after user completes login in browser
-	const cookie = await pollForCookie(sessionId)
+	const cookie = await pollForCookie(sessionId, signal)
 	const token = await verifyToken(cookie)
 
 	return { cookie, token }

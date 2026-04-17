@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Box, Text } from '../ink.js'
 import { useInput } from 'ink'
 import { w3Login } from '../services/w3auth/index.js'
@@ -17,23 +17,22 @@ interface W3LoginFlowProps {
 
 export function W3LoginFlow({ onDone }: W3LoginFlowProps): React.ReactNode {
 	const [loginState, setLoginState] = useState<W3LoginState>({ state: 'idle' })
-	const [isSelected, setIsSelected] = useState(true)
+	const abortControllerRef = useRef<AbortController | null>(null)
 
 	useInput((input, key) => {
 		if (input.toLowerCase() === 'q') {
+			abortControllerRef.current?.abort()
 			process.exit(0)
-		}
-
-		if (key.return && loginState.state === 'idle' && isSelected) {
-			handleLogin()
 		}
 	})
 
 	const handleLogin = async () => {
+		const controller = new AbortController()
+		abortControllerRef.current = controller
 		setLoginState({ state: 'logging_in' })
 
 		try {
-			const result = await w3Login()
+			const result = await w3Login(controller.signal)
 			saveUserInfo(result)
 			setLoginState({ state: 'success' })
 
@@ -42,6 +41,9 @@ export function W3LoginFlow({ onDone }: W3LoginFlowProps): React.ReactNode {
 				onDone()
 			}, 1000)
 		} catch (error) {
+			if (error === 'cancelled') {
+				process.exit(0)
+			}
 			const message = error instanceof Error ? error.message : '未知错误'
 			setLoginState({ state: 'error', message })
 		}
@@ -49,16 +51,14 @@ export function W3LoginFlow({ onDone }: W3LoginFlowProps): React.ReactNode {
 
 	// Auto-start login when component mounts
 	useEffect(() => {
-		if (loginState.state === 'idle') {
-			handleLogin()
-		}
+		handleLogin()
 	}, [])
 
 	if (loginState.state === 'idle') {
 		return (
 			<Box flexDirection="column">
 				<Box>
-					<Text color="cyan">{isSelected ? '> ' : '  '}w3登录</Text>
+					<Text color="cyan">准备登录...</Text>
 				</Box>
 				<Box marginTop={1}>
 					<Text dimColor>按 Q 取消</Text>
@@ -82,8 +82,9 @@ export function W3LoginFlow({ onDone }: W3LoginFlowProps): React.ReactNode {
 
 	if (loginState.state === 'success') {
 		return (
-			<Box>
+			<Box flexDirection="column">
 				<Text color="green">✓ 登录成功</Text>
+				<Text dimColor>可关闭浏览器页签</Text>
 			</Box>
 		)
 	}
