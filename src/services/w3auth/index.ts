@@ -1,5 +1,8 @@
 import { randomUUID } from 'crypto'
 
+// Skip TLS certificate verification for Huawei internal CA
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+
 // URL constants
 const W3_LOGIN_BASE = 'https://www.loginw3.hw.rnd.com/'
 const HAC_API_BASE = 'https://www.hac-y.hw.rnd.com/api/v1'
@@ -90,7 +93,7 @@ export async function w3Login(): Promise<{ cookie: string; token: string }> {
 	const sessionId = generateSessionId()
 	const loginUrl = buildW3LoginUrl(sessionId)
 
-	const { openBrowser } = await import('../utils/browser.js')
+	const { openBrowser } = await import('../../utils/browser.js')
 	const opened = await openBrowser(loginUrl)
 
 	if (!opened) {
